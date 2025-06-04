@@ -14,7 +14,6 @@ from astropy.cosmology import Planck18 as cosmo  # Use Planck 2018 cosmology
 import pandas as pd
 from astropy.stats import sigma_clipped_stats
 
-
 def arcsec_to_kpc(arcsec, redshift, H0=70, Tcmb0=2.725, Om0=0.3):
     '''Function that given a projected angular size of an object
     and its redshift it converts it into the
@@ -89,6 +88,7 @@ ax2.plot(sma, masses, 'o', label='Masses')
 ax2.set_xlabel('semi-major axis [arcsec]')
 ax2.set_ylabel('$\log(\Sigma_*)$ [$M_\odot/$pc$^2$]')
 fig.tight_layout()
+
 # %% Colour grid comparison
 
 sma = np.unique(df['radius'][arg_obj])
