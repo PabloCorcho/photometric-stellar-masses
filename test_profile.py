@@ -41,13 +41,36 @@ def arcsec_to_kpc(arcsec, redshift, H0=70, Tcmb0=2.725, Om0=0.3):
     arcsec_to_rad = np.pi/(180*3600)
     return (arcsec*arcsec_to_rad*da).value
 
+plt.rcParams['figure.figsize'] = (10,7)
+plt.rcParams['xtick.labelsize'] = 16
+plt.rcParams['ytick.labelsize'] = 16
+plt.rcParams['axes.labelsize'] = 20
+plt.rcParams['ytick.direction']='in'
+plt.rcParams['xtick.direction']='in'
+plt.rcParams['ytick.major.size']=10
+plt.rcParams['xtick.major.size']=10
+plt.rcParams['ytick.minor.size']=5
+plt.rcParams['xtick.minor.size']=5
+plt.rcParams['xtick.top']=True
+plt.rcParams['ytick.right']=True
+plt.rcParams['xtick.minor.visible'] = True
+plt.rcParams['ytick.minor.visible'] = True
+plt.rcParams['legend.fancybox'] = True
+plt.rcParams['legend.fontsize'] = 16
+plt.rcParams['axes.titlesize']=16
+plt.rcParams['axes.linewidth'] = 1.3
+
 
 # filename = '/home/pmsa/code/Euclid/analysis/catalogues/besta_catalogue_param_1.6.csv'
 filename = 'test_galaxies_1.3.csv'          # The suffix indicate the growth rate of the isophotes
 df = pd.read_csv(filename)
 
 # Iterate through any of the galaxies by changing the index
-object_id = np.unique(df['object_id'])[10]          ## CHANGE THIS INDEX
+# Index that the observe profiles looks nice:  [*1.3.csv]
+# 20, 8, 10, 12, 40, 34
+index_object = 36  # Change this index to select a different object
+z_label = 'z_spec' # Change this to 'phz_pp_median_redshift' if you want to use photometric redshift
+object_id = np.unique(df['object_id'])[index_object]         
 arg_obj = df['object_id'] == object_id
 arg_obj
 sma = np.unique(df['radius'][arg_obj])
@@ -59,7 +82,7 @@ y_mags = 23.9 - 2.5*np.log10(y_flux) - 5
 j_mags = 23.9 - 2.5*np.log10(j_flux) - 5
 h_mags = 23.9 - 2.5*np.log10(h_flux) - 5
 
-z = np.zeros(len(h_mags)) + df['phz_pp_median_redshift'][arg_obj].iloc[0]
+z = np.zeros(len(h_mags)) + df[z_label][arg_obj].iloc[0]
 
 scale_to_pc = arcsec_to_kpc(1,z[0])*1e3
 
