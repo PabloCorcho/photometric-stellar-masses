@@ -12,8 +12,8 @@ from matplotlib import pyplot as plt
 from photo_grid import YJH_MLR
 from astropy.cosmology import Planck18 as cosmo  # Use Planck 2018 cosmology
 import pandas as pd
-from astropipe.utils import arcsec_to_kpc, average_bin
-from scipy.interpolate import interp1d
+from astropy.stats import sigma_clipped_stats
+
 
 def arcsec_to_kpc(arcsec, redshift, H0=70, Tcmb0=2.725, Om0=0.3):
     '''Function that given a projected angular size of an object
@@ -43,13 +43,12 @@ def arcsec_to_kpc(arcsec, redshift, H0=70, Tcmb0=2.725, Om0=0.3):
     return (arcsec*arcsec_to_rad*da).value
 
 
-
-filename = '/home/pmsa/code/Euclid/analysis/catalogues/besta_catalogue_param_1.6.csv'
+# filename = '/home/pmsa/code/Euclid/analysis/catalogues/besta_catalogue_param_1.6.csv'
+filename = 'test_galaxies_1.3.csv'          # The suffix indicate the growth rate of the isophotes
 df = pd.read_csv(filename)
 
-# object_id = -514086977285521890
-# object_id = -538439791285946076
-object_id = np.unique(df['object_id'])[108]
+# Iterate through any of the galaxies by changing the index
+object_id = np.unique(df['object_id'])[10]          ## CHANGE THIS INDEX
 arg_obj = df['object_id'] == object_id
 arg_obj
 sma = np.unique(df['radius'][arg_obj])
@@ -69,7 +68,7 @@ luminosity_distance = cosmo.luminosity_distance(z).to('pc').value  # Convert to 
 dist_mod = np.log10(luminosity_distance / 10)
 
 
-ir_mass_model = YJH_MLR.from_hdf5("photometry_grid_pypopstar.hdf5")
+ir_mass_model = YJH_MLR.from_hdf5("photometry_grid_pypopstar_euc.hdf5")
 
 
 masses = np.array([ir_mass_model.get_mass(y, j, h, z_obs=z_obs, maxlike=True) for y, j, h, z_obs in zip(
@@ -83,6 +82,7 @@ ax1.plot(sma, j_mags, 'b-*', label='J')
 ax1.plot(sma, h_mags, 'g-*', label='H')
 ax1.set_xlabel('semi-major axis [arcsec]')
 ax1.set_ylabel('$\mu$ [mag/arcsec$^2$]')
+ax2.text(0.95, 0.95, r'$z_{\rm spec}'+f' = {z[0]:.2f}$', transform=ax2.transAxes, fontsize=16, va='top',ha='right')
 ax1.legend()
 ax1.invert_yaxis()
 ax2.plot(sma, masses, 'o', label='Masses')
@@ -114,7 +114,50 @@ plt.xlabel('$J_{\mathrm{E}}$ - $H_{\mathrm{E}}$ ')
 plt.ylabel('$Y_{\mathrm{E}}$ - $J_{\mathrm{E}}$ ')
 plt.tight_layout()
 
+# %% Colour Grid Comparison with Log Density 
+
+fig, ax = plt.subplots(figsize=(8, 6))
+
+# Compute the 2D histogram
+hist, xedges, yedges = np.histogram2d(
+    j_mags - h_mags, 
+    y_mags - j_mags, 
+    bins=1000
+)
+
+# Apply logarithmic transformation to the histogram data
+log_hist = np.log10(hist + 1)  # Add 1 to avoid log(0)
+
+# Plot the histogram using pcolormesh
+im = ax.pcolormesh(
+    xedges, 
+    yedges, 
+    log_hist.T, 
+    cmap='nipy_spectral', 
+    vmin=0, 
+    vmax=np.max(log_hist)
+)
+
+# Overlay scatter points
+ax.scatter(
+    ir_mass_model.model_jh.flatten(),
+    ir_mass_model.model_yj.flatten(),
+    alpha=0.6,
+    s=2,
+    c='white'
+)
+
+# Set axis limits and labels
+ax.set_xlim([-2, 2])
+ax.set_ylim([-2, 2])
+cbar = fig.colorbar(im, ax=ax)  # Create the colorbar
+cbar.set_label('Log Density')
+ax.set_xlabel('$J_{\mathrm{E}}$ - $H_{\mathrm{E}}$')
+ax.set_ylabel('$Y_{\mathrm{E}}$ - $J_{\mathrm{E}}$')
+
+
 #%%
+
 # Define redshift bins
 redshift_bins = np.logspace(np.log10(0.01), np.log10(1), 10)  # 9 bins between 0 and 3
 bin_indices = np.digitize(z, redshift_bins) - 1  # Assign each redshift to a bin
@@ -149,65 +192,58 @@ fig.colorbar(scatter, ax=axes, location='bottom', orientation='horizontal', frac
 fig.tight_layout()
 plt.show()
 
-#%%
-import seaborn as sns
+#%% Colours vs Surface Brightness
 
-# Create the density plot
-fig, (ax1,ax2) = plt.subplots(2,1, sharex=True, sharey=True)
+# Prepare data
+jh_color = j_mags - h_mags
+yj_color = y_mags - j_mags
 cmap = plt.get_cmap('nipy_spectral')
 cmap.set_under(alpha=0)
 
+# Define bins for the histogram
+bins = [500, 500]  # Number of bins for x and y axes
+x_range = [h_mags.min(), h_mags.max()]
+y_range_jh = [jh_color.min(), jh_color.max()]
+y_range_yj = [yj_color.min(), yj_color.max()]
 
-data = pd.DataFrame({
-    'h_mags': h_mags,
-    'jh_color': j_mags - h_mags
-})
+# Compute 2D histograms
+hist_jh, xedges_jh, yedges_jh = np.histogram2d(h_mags, jh_color, bins=bins, range=[x_range, y_range_jh])
+hist_yj, xedges_yj, yedges_yj = np.histogram2d(h_mags, yj_color, bins=bins, range=[x_range, y_range_yj])
 
-sns.kdeplot(
-    data=data,
-    x='h_mags',
-    y='jh_color',
-    cmap=cmap,
-    fill=True,
-    levels=50,
-    thresh=0.01,
-    ax=ax1
-)
 
-data = pd.DataFrame({
-    'h_mags': h_mags,
-    'yj_color': y_mags - j_mags
-})
+# Plot the histograms
+fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True, sharey=True, figsize=(8, 8))
 
-sns.kdeplot(
-    data=data,
-    x='h_mags',
-    y='yj_color',
-    cmap=cmap,
-    fill=True,
-    levels=50,
-    thresh=0.01,
-    ax=ax2
-)
-# ax1.plot(h_mags, y_mags-j_mags, 'k.',alpha=0.02)
+# First plot: $H_{\mathrm{E}}$ vs $J_{\mathrm{E}}$ - $H_{\mathrm{E}}$
+im1 = ax1.pcolormesh(xedges_jh, yedges_jh, hist_jh.T, cmap=cmap, vmin=1)
+fig.colorbar(im1, ax=ax1, label='Counts')
 ax1.set_xlabel('$H_{\mathrm{E}}$')
-ax1.set_ylabel('$Y_{\mathrm{E}}$ - $J_{\mathrm{E}}$ ')
-# ax2.plot(h_mags, j_mags-h_mags, 'k.',alpha=0.02)
+ax1.set_ylabel('$J_{\mathrm{E}}$ - $H_{\mathrm{E}}$')
+
+# Second plot: $H_{\mathrm{E}}$ vs $Y_{\mathrm{E}}$ - $J_{\mathrm{E}}$
+im2 = ax2.pcolormesh(xedges_yj, yedges_yj, hist_yj.T, cmap=cmap, vmin=1)
+fig.colorbar(im2, ax=ax2, label='Counts')
 ax2.set_xlabel('$H_{\mathrm{E}}$')
-ax2.set_ylabel('$J_{\mathrm{E}}$ - $H_{\mathrm{E}}$ ')
+ax2.set_ylabel('$Y_{\mathrm{E}}$ - $J_{\mathrm{E}}$')
+
 ax1.set_ylim([-5,5])
 
-# %%
-from astropy.stats import sigma_clipped_stats
+
+plt.tight_layout()
+plt.show()
+
+
+# %% Histogram of the colours
+
 plt.figure()
 
 _,med,std = sigma_clipped_stats(j_mags-h_mags)
-_ = plt.hist(j_mags-h_mags,bins=40,histtype='step', label='$J_{\mathrm{E}}$ - $H_{\mathrm{E}}$ ', color='magenta')
+_ = plt.hist(j_mags-h_mags,bins=600,histtype='step', label='$J_{\mathrm{E}}$ - $H_{\mathrm{E}}$ ', color='magenta')
 plt.axvline(med,color='magenta',lw=2)
 plt.axvline(med+5*std,color='magenta',ls='--',lw=2)
 plt.axvline(med-5*std,color='magenta',ls='--',lw=2, label='5$\sigma$')
 _,med,std = sigma_clipped_stats(y_mags-j_mags)
-_ = plt.hist(y_mags-j_mags,bins=40,histtype='step', label='$Y_{\mathrm{E}}$ - $J_{\mathrm{E}}$ ',color='orange')
+_ = plt.hist(y_mags-j_mags,bins=600,histtype='step', label='$Y_{\mathrm{E}}$ - $J_{\mathrm{E}}$ ',color='orange')
 plt.axvline(med,color='orange',lw=2)
 plt.axvline(med+5*std,color='orange',ls='--',lw=2, label='5$\sigma$')
 plt.axvline(med-5*std,color='orange',ls='--',lw=2)
@@ -215,8 +251,4 @@ plt.legend()
 plt.xlabel('Colour')
 plt.ylabel('Counts')
 plt.yscale('log')
-
-
-
-
 
