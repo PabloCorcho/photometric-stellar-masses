@@ -68,7 +68,7 @@ df = pd.read_csv(filename)
 # Iterate through any of the galaxies by changing the index
 # Index that the observe profiles looks nice:  [*1.3.csv]
 # 20, 8, 10, 12, 40, 34
-index_object = 36  # Change this index to select a different object
+index_object = 105  # Change this index to select a different object
 z_label = 'z_spec' # Change this to 'phz_pp_median_redshift' if you want to use photometric redshift
 object_id = np.unique(df['object_id'])[index_object]         
 arg_obj = df['object_id'] == object_id
@@ -90,20 +90,41 @@ luminosity_distance = cosmo.luminosity_distance(z).to('pc').value  # Convert to 
 dist_mod = np.log10(luminosity_distance / 10)
 
 
-ir_mass_model = YJH_MLR.from_hdf5("photometry_grid_pypopstar_euc.hdf5")
+# ir_mass_model = YJH_MLR.from_hdf5("photometry_grid_pypopstar_euc.hdf5")
+ir_mass_model = YJH_MLR.from_hdf5("photometry_grid_emiles_euc.hdf5")
 
+logprior = 0
+masses = np.zeros_like(y_mags)
+masses_err = np.zeros_like(y_mags)
 
-masses = np.array([ir_mass_model.get_mass(y, j, h, z_obs=z_obs, maxlike=True) for y, j, h, z_obs in zip(
-    y_mags - dist_mod, j_mags - dist_mod, h_mags - dist_mod, z)])
+masses_prior = np.zeros_like(y_mags)
+masses_err_prior = np.zeros_like(y_mags)
+
+for idx, (y, j, h, z_obs) in enumerate(
+        zip(y_mags - dist_mod, j_mags - dist_mod, h_mags - dist_mod, z)):
+    logpost, logmass_g = ir_mass_model.get_posterior(y, j, h, z_obs=z_obs,
+                                                     logprior=None)
+    masses[idx], masses_err[idx] = ir_mass_model.get_mean_mass(y, j, h, z_obs=z_obs,
+                                                              logprior=logprior)
+    masses_prior[idx], masses_err_prior[idx] = ir_mass_model.get_mean_mass(
+        y, j, h, z_obs=z_obs, logprior=logprior)
+    logprior = logpost
+    
+    # plt.figure()
+    # plt.hist(logmass_g, weights=np.exp(logpost),  bins=20,
+    #          range=[masses_prior[idx] - 5 * masses_err_prior[idx],
+    #                 masses_prior[idx] + 5 * masses_err_prior[idx]])
+    # break
 
 masses += -np.log10(1/scale_to_pc**2)
+masses_prior += -np.log10(1/scale_to_pc**2)
 
 fig, (ax1,ax2) = plt.subplots(1, 2,sharex=True, figsize=(12, 6))
 ax1.plot(sma, y_mags, 'r-*', label='Y')
 ax1.plot(sma, j_mags, 'b-*', label='J')
 ax1.plot(sma, h_mags, 'g-*', label='H')
 ax1.set_xlabel('semi-major axis [arcsec]')
-ax1.set_ylabel('$\mu$ [mag/arcsec$^2$]')
+ax1.set_ylabel('$\mu$ [mag/arcsec''$^2$]')
 ax2.text(0.95, 0.95, r'$z_{\rm spec}'+f' = {z[0]:.2f}$', transform=ax2.transAxes, fontsize=16, va='top',ha='right')
 ax1.legend()
 ax1.invert_yaxis()
@@ -111,6 +132,31 @@ ax2.plot(sma, masses, 'o', label='Masses')
 ax2.set_xlabel('semi-major axis [arcsec]')
 ax2.set_ylabel('$\log(\Sigma_*)$ [$M_\odot/$pc$^2$]')
 fig.tight_layout()
+
+fig, axs = plt.subplots(nrows=1, ncols=2, figsize=(10, 4), constrained_layout=True)
+ax = axs[0]
+twax = ax.twinx()
+ax.errorbar(sma, masses, yerr=masses_err, label="Masses")
+ax.errorbar(sma, masses_prior, yerr=masses_err_prior, label="Masses")
+
+twax.plot(sma, y_mags - j_mags, 'r-*', label='Y - J')
+twax.plot(sma, j_mags - h_mags, 'b-*', label='J - H')
+twax.legend(loc="lower left")
+ax.set_ylabel('$\log(\Sigma_*)$ [$M_\odot/$pc$^2$]')
+ax.set_xlabel('semi-major axis [arcsec]')
+twax.set_ylabel('color index')
+
+ax = axs[1]
+ax.scatter(ir_mass_model.model_jh.flatten(),ir_mass_model.model_yj.flatten(),
+           alpha=0.6,s=2,c='grey')
+mappable = ax.scatter(j_mags - h_mags, y_mags - j_mags,
+                      c=sma)
+ax.set_xlim(-1, 1)
+ax.set_ylim(-1, 1)
+ax.set_xlabel('J - H')
+ax.set_ylabel('Y - J')
+plt.colorbar(mappable, ax=ax, label='semi-major axis [arcsec]')
+
 
 # %% Colour grid comparison
 
