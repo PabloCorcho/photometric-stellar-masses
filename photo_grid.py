@@ -21,26 +21,43 @@ class YJH_MLR:
         self.redshift = z_grid
         self.phys_params = phys_params
 
-    def get_mass(self, y, j, h, yerr=0.01, jerr=0.01, herr=0.01, z_obs=0.0, maxlike=False):
-        
+    def get_posterior(self, y, j, h, yerr=0.01, jerr=0.01, herr=0.01, z_obs=0.0,
+                      logprior=None):
+        """Compute the posterior of the model grid."""
+        # Redshift selection
         idx = np.searchsorted(self.redshift, z_obs).clip(min=1, max=self.redshift.size)
         widx = 1 - (self.redshift[idx] - z_obs) / (self.redshift[idx] - self.redshift[idx - 1])
         model_yj = self.model_yj[idx] * widx + self.model_yj[idx - 1] * (1 - widx)
         model_jh = self.model_jh[idx] * widx + self.model_jh[idx - 1] * (1 - widx)
         model_h = self.model_h[idx] * widx + self.model_h[idx - 1] * (1 - widx)
 
+        # Grid likelihood
         loglike = -0.5 * (
             (model_yj - (y - j))**2 / (yerr**2 + jerr**2)
             + (model_jh - (j - h))**2 / (jerr**2 + herr**2))
+        if logprior is not None:
+            loglike += logprior
+        # Renormalize to prevent underflow
+        loglike -= np.nanmax(loglike)
+        return loglike, (model_h - h) / 2.5
+
+    def get_mean_mass(self, y, j, h, yerr=0.01, jerr=0.05, herr=0.05, z_obs=0.0,
+                      logprior=None):
+        logpost, logmass_grid = self.get_posterior(
+            y, j, h, yerr=yerr, jerr=jerr, herr=herr,
+            z_obs=z_obs, logprior=logprior)
         
-        if maxlike:
-            best_fit = np.nanargmax(loglike)
-            best_fit_h_logmass = (model_h[best_fit] - h) / 2.5
-            return best_fit_h_logmass
-        else:
-            mean_h_logmass = np.nansum(np.exp(loglike) * (
-            model_h - h) / 2.5) / np.nansum(np.exp(loglike))
-            return mean_h_logmass
+        posterior = np.exp(logpost)
+        posterior /= np.nansum(np.exp(logpost))
+        mean_logmass = np.nansum(posterior * logmass_grid)
+        sigma_logmass = np.nansum(posterior * (mean_logmass - logmass_grid)
+                                  **2)**0.5
+        return mean_logmass, sigma_logmass
+
+    def get_maxlike_mass(self, y, j, h, z_obs=0.0):
+        logpost, logmass_grid = self.get_mass(y, j, h)
+        best_fit = np.nanargmax(logpost)
+        return logmass_grid[best_fit]
 
     @classmethod
     def from_pickle():
