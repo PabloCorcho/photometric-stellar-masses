@@ -69,11 +69,11 @@ if __name__ == "__main__":
 
     dust_model = DustScreen("ccm89")
 
-    ism_metallicity_range = np.linspace(0.0001, 0.08, 10)
-    t0_range = np.linspace(0.1, 20, 15)
-    scale_range = np.linspace(0.01, 10, 15)
+    ism_metallicity_range = np.geomspace(0.004, 0.1, 15)
+    t0_range = np.geomspace(0.1, 30, 15)
+    scale_range = np.geomspace(0.01, 10, 15)
     av_range = np.linspace(0, 1, 1)
-    z_grid = np.arange(0, 1, 0.05)
+    z_grid = np.arange(0, 2, 0.05)
     filter_names = [
         # "Subaru_HSC.g",
         # "CFHT_MegaCam.r",
@@ -170,7 +170,8 @@ if __name__ == "__main__":
     # lmr = model_photometry[:, :, :, :, -2].flatten()[best_fit]
     # mass = np.log10(tng["Euclid_NISP.H"].value / 1e9 / lmr)
     
-    mass = np.array([ir_mass_model.get_mass(y, j, h, z_obs=z_obs, maxlike=True) for y, j, h in zip(
+    mass = np.array(
+        [ir_mass_model.get_mass(y, j, h, z_obs=z_obs, maxlike=True) for y, j, h in zip(
         -2.5 * np.log10(tng["Euclid_NISP.Y"].value / 1e9),
         -2.5 * np.log10(tng["Euclid_NISP.J"].value / 1e9),
         -2.5 * np.log10(tng["Euclid_NISP.H"].value / 1e9))])
